@@ -35,6 +35,7 @@
 #include "flight/position.h"
 #include "rx/rx.h"
 #include "sensors/compass.h"
+#include "sensors/opticalflow.h"
 
 #include "pg/pos_hold.h"
 #include "pos_hold.h"
@@ -66,16 +67,27 @@ static void posHoldCheckSticks(void)
 
 static bool sensorsOk(void)
 {
-    if (!STATE(GPS_FIX)) {
+    // Allow optical flow as alternative to GPS
+    bool hasGps = STATE(GPS_FIX);
+    bool hasOpticalflow = sensors(SENSOR_OPTICALFLOW) && isOpticalflowHealthy() && isOpticalflowPositionInitialized();
+    
+    // Require either GPS or optical flow
+    if (!hasGps && !hasOpticalflow) {
         return false;
     }
-    if (
+    
+    // If using GPS, check compass requirement
+    if (hasGps) {
+        if (
 #ifdef USE_MAG
-        !compassIsHealthy() &&
+            !compassIsHealthy() &&
 #endif
-        (!posHoldConfig()->posHoldWithoutMag || !canUseGPSHeading)) {
-        return false;
+            (!posHoldConfig()->posHoldWithoutMag || !canUseGPSHeading)) {
+            return false;
+        }
     }
+    // If using optical flow only, no compass requirement needed
+    
     return true;
 }
 
@@ -83,7 +95,23 @@ void updatePosHold(timeUs_t currentTimeUs) {
     UNUSED(currentTimeUs);
     if (FLIGHT_MODE(POS_HOLD_MODE)) {
         if (!posHold.isEnabled) {
-            resetPositionControl(&gpsSol.llh, POSHOLD_TASK_RATE_HZ); // sets target location to current location
+            // Check if we have GPS or optical flow
+            bool hasGps = STATE(GPS_FIX);
+            bool hasOpticalflow = sensors(SENSOR_OPTICALFLOW) && isOpticalflowHealthy();
+            
+            if (hasGps) {
+                // Use GPS position
+                resetPositionControl(&gpsSol.llh, POSHOLD_TASK_RATE_HZ);
+            } else if (hasOpticalflow) {
+                // Use optical flow - initialize with dummy GPS location (not used for optical flow)
+                gpsLocation_t dummyLocation = {0};
+                resetPositionControl(&dummyLocation, POSHOLD_TASK_RATE_HZ);
+            } else {
+                // No position sensor available
+                posHold.isControlOk = false;
+                posHold.isEnabled = false;
+                return;
+            }
             posHold.isControlOk = true;
             posHold.isEnabled = true;
         }
@@ -91,7 +119,7 @@ void updatePosHold(timeUs_t currentTimeUs) {
         posHold.isEnabled = false;
     }
 
-    if (posHold.isEnabled && posHold.isControlOk) {
+    if (posHold.isEnabled) {
         posHold.areSensorsOk = sensorsOk();
         if (posHold.areSensorsOk) {
             posHoldCheckSticks();

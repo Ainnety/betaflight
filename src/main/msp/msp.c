@@ -3670,6 +3670,16 @@ static mspResult_e mspProcessInCommand(mspDescriptor_t srcDesc, int16_t cmdMSP, 
         break;
 #endif
 
+#if defined(USE_RANGEFINDER_UPIX)
+    case MSP2_SENSOR_RANGEFINDER_UPIX:
+        upixRangefinderReceiveNewData(sbufPtr(src));
+        break;
+
+    case MSP2_SENSOR_OPTICALFLOW_UPIX:
+        upixOpticalflowReceiveNewData(sbufPtr(src));
+        break;
+#endif
+
 #ifdef USE_GPS
     case MSP2_SENSOR_GPS:
         (void)sbufReadU8(src);              // instance

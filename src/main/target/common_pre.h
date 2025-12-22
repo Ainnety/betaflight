@@ -281,6 +281,16 @@
 
 #endif // !defined(CLOUD_BUILD)
 
+#if !defined(USE_GPS)
+#define USE_GPS
+#endif
+#define USE_ALTITUDE_HOLD
+#define USE_POSITION_HOLD
+
+#define USE_RANGEFINDER
+// #define USE_OPTICALFLOW_MT
+#define USE_OPTICALFLOW_UPIX
+
 #if !defined(LED_STRIP_MAX_LENGTH)
 #ifdef USE_LED_STRIP_64
 #define LED_STRIP_MAX_LENGTH           64

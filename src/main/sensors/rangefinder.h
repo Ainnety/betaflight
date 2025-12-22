@@ -18,50 +18,52 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+ #pragma once
 
-#include <stdint.h>
-
-#include "drivers/rangefinder/rangefinder.h"
-
-#include "pg/pg.h"
-
-typedef enum {
-    RANGEFINDER_NONE        = 0,
-    RANGEFINDER_HCSR04      = 1,
-    RANGEFINDER_TFMINI      = 2,
-    RANGEFINDER_TF02        = 3,
-    RANGEFINDER_MTF01       = 4,
-    RANGEFINDER_MTF02       = 5,
-    RANGEFINDER_MTF01P      = 6,
-    RANGEFINDER_MTF02P      = 7,
-    RANGEFINDER_TFNOVA      = 8,
-} rangefinderType_e;
-
-typedef struct rangefinderConfig_s {
-    uint8_t rangefinder_hardware;
-} rangefinderConfig_t;
-
-PG_DECLARE(rangefinderConfig_t, rangefinderConfig);
-
-typedef struct rangefinder_s {
-    rangefinderDev_t dev;
-    float maxTiltCos;
-    int32_t rawAltitude;
-    int32_t calculatedAltitude;
-    timeMs_t lastValidResponseTimeMs;
-
-    bool snrThresholdReached;
-    int32_t dynamicDistanceThreshold;
-    int16_t snr;
-} rangefinder_t;
-
-void rangefinderResetDynamicThreshold(void);
-bool rangefinderInit(void);
-
-int32_t rangefinderGetLatestAltitude(void);
-int32_t rangefinderGetLatestRawAltitude(void);
-
-void rangefinderUpdate(void);
-bool rangefinderProcess(float cosTiltAngle);
-bool rangefinderIsHealthy(void);
+ #include <stdint.h>
+ 
+ #include "drivers/rangefinder/rangefinder.h"
+ 
+ #include "pg/pg.h"
+ 
+ typedef enum {
+     RANGEFINDER_NONE        = 0,
+     RANGEFINDER_HCSR04      = 1,
+     RANGEFINDER_TFMINI      = 2,
+     RANGEFINDER_TF02        = 3,
+     RANGEFINDER_MTF01       = 4,
+     RANGEFINDER_MTF02       = 5,
+     RANGEFINDER_MTF01P      = 6,
+     RANGEFINDER_MTF02P      = 7,
+     RANGEFINDER_TFNOVA      = 8,
+     RANGEFINDER_UPIX        = 9,
+ } rangefinderType_e;
+ 
+ typedef struct rangefinderConfig_s {
+     uint8_t rangefinder_hardware;
+ } rangefinderConfig_t;
+ 
+ PG_DECLARE(rangefinderConfig_t, rangefinderConfig);
+ 
+ typedef struct rangefinder_s {
+     rangefinderDev_t dev;
+     float maxTiltCos;
+     int32_t rawAltitude;
+     int32_t calculatedAltitude;
+     timeMs_t lastValidResponseTimeMs;
+ 
+     bool snrThresholdReached;
+     int32_t dynamicDistanceThreshold;
+     int16_t snr;
+ } rangefinder_t;
+ 
+ void rangefinderResetDynamicThreshold(void);
+ bool rangefinderInit(void);
+ 
+ int32_t rangefinderGetLatestAltitude(void);
+ int32_t rangefinderGetLatestRawAltitude(void);
+ 
+ void rangefinderUpdate(void);
+ bool rangefinderProcess(float cosTiltAngle);
+ bool rangefinderIsHealthy(void);
+ 

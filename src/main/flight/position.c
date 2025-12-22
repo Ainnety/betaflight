@@ -43,6 +43,9 @@
 
 #include "sensors/sensors.h"
 #include "sensors/barometer.h"
+#ifdef USE_RANGEFINDER
+#include "sensors/rangefinder.h"
+#endif
 
 #include "pg/pg.h"
 #include "pg/pg_ids.h"
@@ -88,7 +91,7 @@ PG_RESET_TEMPLATE(positionConfig_t, positionConfig,
     .altitude_d_lpf = 100,
 );
 
-#if defined(USE_BARO) || defined(USE_GPS)
+#if defined(USE_BARO) || defined(USE_GPS) || defined(USE_RANGEFINDER)
 void calculateEstimatedAltitude(void)
 {
     static bool wasArmed = false;
@@ -126,6 +129,18 @@ void calculateEstimatedAltitude(void)
         gpsTrust = MIN(gpsTrust, 0.9f);
     }
 #endif
+#ifdef USE_RANGEFINDER
+    int32_t rfAltCm = RANGEFINDER_OUT_OF_RANGE;
+    bool haveRangefinderAlt = false;
+
+    if (sensors(SENSOR_RANGEFINDER) && rangefinderIsHealthy()) {
+        const int32_t rfAlt = rangefinderGetLatestAltitude();
+        if (rfAlt >= 0 && rfAlt != RANGEFINDER_OUT_OF_RANGE) {
+            rfAltCm = rfAlt;
+            haveRangefinderAlt = true;
+        }
+    }
+#endif
 
     //  ***  DISARMED  ***
     if (!ARMING_FLAG(ARMED)) {
@@ -154,6 +169,15 @@ void calculateEstimatedAltitude(void)
         }
 
         baroAltCm -= baroAltOffsetCm; // use smoothed baro with most recent zero from disarm period
+
+#ifdef USE_RANGEFINDER
+        // 在低高度时，使用测距仪（TOF）数据替代气压计数据，提高精度
+        // 如果测距仪有有效数据且在量程内（例如 < 400cm），优先使用测距仪高度
+        if (haveRangefinderAlt && rfAltCm > 0 && rfAltCm < 400) {  // 400cm 可根据 TOF 量程调整
+            baroAltCm = rfAltCm;
+            haveBaroAlt = true; // 标记为有高度数据可用
+        }
+#endif
 
         if (haveGpsAlt) { // update relativeAltitude with every new gpsAlt value, or hold the previous value until 3D lock recovers
             if (!useZeroedGpsAltitude && haveBaroAlt) { // armed without zero offset, can use baro values to zero later
@@ -212,10 +236,14 @@ void calculateEstimatedAltitude(void)
     DEBUG_SET(DEBUG_RTH, 1, lrintf(displayAltitudeCm / 10.0f));
     DEBUG_SET(DEBUG_AUTOPILOT_ALTITUDE, 2, lrintf(zeroedAltitudeCm));
 
-    altitudeAvailable = haveGpsAlt || haveBaroAlt;
+    altitudeAvailable = haveGpsAlt || haveBaroAlt
+#ifdef USE_RANGEFINDER
+        || haveRangefinderAlt
+#endif
+        ;
 }
 
-#endif //defined(USE_BARO) || defined(USE_GPS)
+#endif //defined(USE_BARO) || defined(USE_GPS) || defined(USE_RANGEFINDER)
 
 float getAltitudeCm(void)
 {

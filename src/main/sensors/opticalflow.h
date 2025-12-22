@@ -30,6 +30,7 @@
 typedef enum {
     OPTICALFLOW_NONE = 0,
     OPTICALFLOW_MT = 1,
+    OPTICALFLOW_UPIX = 2,
 } opticalflowType_e;
 
 typedef struct opticalflowConfig_s {
@@ -46,7 +47,8 @@ typedef struct opticalflow_s {
     int16_t quality;
     vector2_t rawFlowRates;
     vector2_t processedFlowRates;
-    uint32_t timeStampUs;
+    uint32_t timeStampUs;     // 上一次有效数据的时间戳（us）
+    int32_t  deltaTimeUs;     // 本次与上一次数据之间的时间间隔（us，>0 表示有效）
 } opticalflow_t;
 
 bool opticalflowInit(void);
@@ -54,3 +56,8 @@ bool opticalflowInit(void);
 void opticalflowUpdate(void);
 bool isOpticalflowHealthy(void);
 void opticalflowProcess(void);
+
+const opticalflow_t * getOpticalflowData(void);
+
+// 返回最近一次光流更新的时间间隔（us），若无有效数据则可能为 0 或保持上一次值
+int32_t getOpticalflowDeltaTimeUs(void);

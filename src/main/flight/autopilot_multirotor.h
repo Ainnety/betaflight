@@ -35,4 +35,11 @@ bool isBelowLandingAltitude(void);
 float getAutopilotThrottle(void);
 bool isAutopilotInControl(void);
 
+// Optical flow position estimation functions
+void updateOpticalflowPositionEstimation(void);
+bool getOpticalflowPosition(vector2_t *positionCm);
+bool getOpticalflowVelocity(vector2_t *velocityCmS);
+bool isOpticalflowPositionInitialized(void);
+void updateOpticalflowPosition(void);
+
 #endif // !USE_WING

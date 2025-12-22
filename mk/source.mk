@@ -235,6 +235,7 @@ COMMON_SRC = \
             cms/cms_menu_quick.c \
             drivers/display_ug2864hsweg01.c \
             drivers/light_ws2811strip.c \
+            drivers/opticalflow/opticalflow_upix.c \
             drivers/rangefinder/rangefinder_hcsr04.c \
             drivers/rangefinder/rangefinder_lidartf.c \
             drivers/rangefinder/rangefinder_lidarmt.c \
