@@ -72,6 +72,7 @@
 #include "drivers/vtx_common.h"
 #include "drivers/vtx_table.h"
 #include "drivers/rangefinder/rangefinder_lidarmt.h"
+#include "drivers/opticalflow/opticalflow_upix.h"
 
 #include "fc/board_info.h"
 #include "fc/controlrate_profile.h"
