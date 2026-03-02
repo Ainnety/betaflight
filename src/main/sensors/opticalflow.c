@@ -57,14 +57,12 @@
  #include "sensors/acceleration.h"
  #include "sensors/opticalflow.h"
  
- #include "flight/imu.h"
  
  #define OPTICALFLOW_CALIBRATION_DURATION_MS 30000
  #define RATE_SCALE_RESOLUTION (1000.0f)
  
  // static prototypes
  static void applySensorRotation(vector2_t * dst, vector2_t * src);
- static void applyIMUAlignment(vector2_t * flowRates);
  static void applyLPF(vector2_t * flowRates);
  
  PG_REGISTER_WITH_RESET_TEMPLATE(opticalflowConfig_t, opticalflowConfig, PG_OPTICALFLOW_CONFIG, 0);
@@ -156,19 +154,17 @@
  
  void opticalflowProcess(void) {
      opticalflowData_t data = {0};
-     int32_t deltaTimeUs = 0;
+     uint32_t deltaTimeUs = 0;
      opticalflow.dev.read(&opticalflow.dev, &data);
  
      opticalflow.quality = data.quality;
      deltaTimeUs = cmp32(data.timeStampUs, opticalflow.timeStampUs);
  
-     // 只接受正的时间间隔，防止时间戳回退或异常导致的负值 / 溢出
-     if (deltaTimeUs > 0) { // New data
+     if (deltaTimeUs != 0) { // New data
          vector2_t raw = data.flowRate;
          vector2_t processed;
  
          applySensorRotation(&processed, &raw);
-         applyIMUAlignment(&processed);
          applyLPF(&processed);
  
          opticalflow.rawFlowRates = raw;
@@ -177,50 +173,22 @@
          opticalflow.deltaTimeUs  = deltaTimeUs;
  
          // DEBUG SECTION
-         // DEBUG_SET(DEBUG_OPTICALFLOW, 0, opticalflow.quality);
-         // DEBUG_SET(DEBUG_OPTICALFLOW, 1, lrintf(opticalflow.rawFlowRates.x * 1000));
-         // DEBUG_SET(DEBUG_OPTICALFLOW, 2, lrintf(opticalflow.rawFlowRates.y * 1000));
-         // DEBUG_SET(DEBUG_OPTICALFLOW, 3, lrintf(opticalflow.processedFlowRates.x * 1000));
-         // DEBUG_SET(DEBUG_OPTICALFLOW, 4, lrintf(opticalflow.processedFlowRates.y * 1000));
-         // DEBUG_SET(DEBUG_OPTICALFLOW, 5, deltaTimeUs);
- 
          DEBUG_SET(DEBUG_OPTICALFLOW, 0, opticalflow.quality);
-         DEBUG_SET(DEBUG_OPTICALFLOW, 1, lrintf(opticalflow.rawFlowRates.x ));
-         DEBUG_SET(DEBUG_OPTICALFLOW, 2, lrintf(opticalflow.rawFlowRates.y ));
-         DEBUG_SET(DEBUG_OPTICALFLOW, 3, lrintf(opticalflow.processedFlowRates.x ));
-         DEBUG_SET(DEBUG_OPTICALFLOW, 4, lrintf(opticalflow.processedFlowRates.y ));
+         DEBUG_SET(DEBUG_OPTICALFLOW, 1, lrintf(opticalflow.rawFlowRates.x * 1000));
+         DEBUG_SET(DEBUG_OPTICALFLOW, 2, lrintf(opticalflow.rawFlowRates.y * 1000));
+         DEBUG_SET(DEBUG_OPTICALFLOW, 3, lrintf(opticalflow.processedFlowRates.x * 1000));
+         DEBUG_SET(DEBUG_OPTICALFLOW, 4, lrintf(opticalflow.processedFlowRates.y * 1000));
          DEBUG_SET(DEBUG_OPTICALFLOW, 5, deltaTimeUs);
      }
  }
  
- int32_t getOpticalflowDeltaTimeUs(void) {
+ uint32_t getOpticalflowDeltaTimeUs(void) {
      return opticalflow.deltaTimeUs;
  }
  
  static void applySensorRotation(vector2_t * dst, vector2_t * src) {
      dst->x = (opticalflowConfig()->flip_x ? -1.0f : 1.0f) * (src->x * cosRotAngle - src->y * sinRotAngle);
      dst->y = src->x * sinRotAngle + src->y * cosRotAngle;
- }
- 
- static void applyIMUAlignment(vector2_t * flowRates) {
-     // Apply tilt compensation: when the craft is tilted, optical flow measures
-     // velocity perpendicular to the sensor plane, which needs to be compensated
-     // by dividing by cos(tilt angle) to get the true ground velocity.
-     const float cosTilt = getCosTiltAngle();
-     
-     // Avoid division by very small values (tilt > 84 degrees)
-     // Data becomes unreliable at high tilt angles
-     if (cosTilt > 0.1f) {
-         flowRates->x /= cosTilt;
-         flowRates->y /= cosTilt;
-     } else {
-         // Tilt too large, data unreliable - set to zero
-         flowRates->x = 0.0f;
-         flowRates->y = 0.0f;
-     }
-     
-     // Note: Yaw rotation (body frame to earth frame) is handled in position control
-     // where the velocity is converted using attitude.values.yaw
  }
  
  static void applyLPF(vector2_t * flowRates) {

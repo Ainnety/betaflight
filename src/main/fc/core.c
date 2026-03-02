@@ -1042,7 +1042,7 @@ void processRxModes(timeUs_t currentTimeUs)
 
 #ifdef USE_ALTITUDE_HOLD
     // only if armed; can coexist with position hold
-    if (ARMING_FLAG(ARMED)
+    if (true //ARMING_FLAG(ARMED)
         // and not in GPS_RESCUE_MODE, to give it priority over Altitude Hold
         && !FLIGHT_MODE(GPS_RESCUE_MODE)
         // and either the alt_hold switch is activated, or are in failsafe landing mode
@@ -1052,7 +1052,7 @@ void processRxModes(timeUs_t currentTimeUs)
         // and we have altitude data
         && isAltitudeAvailable()
         // but not until throttle is raised
-        && wasThrottleRaised()) {
+        && true) { //wasThrottleRaised()) {
         if (!FLIGHT_MODE(ALT_HOLD_MODE)) {
             ENABLE_FLIGHT_MODE(ALT_HOLD_MODE);
         }
@@ -1063,7 +1063,7 @@ void processRxModes(timeUs_t currentTimeUs)
 
 #ifdef USE_POSITION_HOLD
     // only if armed; can coexist with altitude hold
-    if (ARMING_FLAG(ARMED)
+    if (true //ARMING_FLAG(ARMED)
         // and not in GPS_RESCUE_MODE, to give it priority over Position Hold
         && !FLIGHT_MODE(GPS_RESCUE_MODE)
         // and either the alt_hold switch is activated, or are in failsafe landing mode
@@ -1071,7 +1071,7 @@ void processRxModes(timeUs_t currentTimeUs)
         // and we have Acc for self-levelling
         && sensors(SENSOR_ACC)
         // but not until throttle is raised
-        && wasThrottleRaised()) {
+        && true) { //wasThrottleRaised()) {
         if (!FLIGHT_MODE(POS_HOLD_MODE)) {
             ENABLE_FLIGHT_MODE(POS_HOLD_MODE);
         }

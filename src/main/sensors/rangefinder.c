@@ -125,7 +125,6 @@
          case RANGEFINDER_MTF02:
          case RANGEFINDER_MTF01P:
          case RANGEFINDER_MTF02P:
-         case RANGEFINDER_UPIX:
              if (mtRangefinderDetect(dev, rangefinderHardwareToUse)) {
                  rangefinderHardware = rangefinderHardwareToUse;
                  rescheduleTask(TASK_RANGEFINDER, TASK_PERIOD_MS(dev->delayMs));

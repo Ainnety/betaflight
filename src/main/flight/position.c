@@ -150,7 +150,18 @@ void calculateEstimatedAltitude(void)
         }
 
         newBaroAltOffsetCm = 0.2f * baroAltCm + 0.8f * newBaroAltOffsetCm; // smooth some recent baro samples
-        displayAltitudeCm = baroAltCm - baroAltOffsetCm; // if no GPS altitude, show un-smoothed Baro altitude in OSD and sensors tab, using most recent offset.
+        // displayAltitudeCm = baroAltCm - baroAltOffsetCm; // if no GPS altitude, show un-smoothed Baro altitude in OSD and sensors tab, using most recent offset.
+        
+#ifdef USE_RANGEFINDER
+        // At low altitudes, use rangefinder data for display when available
+        if (haveRangefinderAlt && rfAltCm > 0 && rfAltCm < rangefinderMaxRangeCm) {
+            displayAltitudeCm = rfAltCm; // Use rangefinder directly for display
+        } else {
+            displayAltitudeCm = baroAltCm - baroAltOffsetCm;
+        }
+#else
+        displayAltitudeCm = baroAltCm - baroAltOffsetCm;
+#endif
 
         if (haveGpsAlt) { // watch for valid GPS altitude data to get a zero value from
             gpsAltOffsetCm = gpsAltCm; // update the zero offset value with the most recent valid gps altitude reading
@@ -171,14 +182,13 @@ void calculateEstimatedAltitude(void)
         baroAltCm -= baroAltOffsetCm; // use smoothed baro with most recent zero from disarm period
 
 #ifdef USE_RANGEFINDER
-        // 在低高度时，使用测距仪（TOF）数据替代气压计数据，提高精度
-        // 如果测距仪有有效数据且在量程内（例如 < 400cm），优先使用测距仪高度
-        if (haveRangefinderAlt && rfAltCm > 0 && rfAltCm < 400) {  // 400cm 可根据 TOF 量程调整
-            baroAltCm = rfAltCm;
-            haveBaroAlt = true; // 标记为有高度数据可用
-        }
+        // At low altitudes, use the data from the rangefinder to replace that from the barometer to improve accuracy
+        // If the rangefinder has valid data and is within the range, use the rangefinder height directly without GPS fusion
+        if (haveRangefinderAlt && rfAltCm > 0 && rfAltCm < rangefinderMaxRangeCm) {  // rangefinderMaxRangeCm can be adjusted according to the TOF range
+            zeroedAltitudeCm = rfAltCm; // Use rangefinder directly without GPS fusion
+            haveBaroAlt = true; // mark as having height data available
+        } else {
 #endif
-
         if (haveGpsAlt) { // update relativeAltitude with every new gpsAlt value, or hold the previous value until 3D lock recovers
             if (!useZeroedGpsAltitude && haveBaroAlt) { // armed without zero offset, can use baro values to zero later
                 gpsAltOffsetCm = gpsAltCm - baroAltCm; // not very accurate
@@ -205,7 +215,10 @@ void calculateEstimatedAltitude(void)
             }
         } else if (haveBaroAlt && (positionConfig()->altitude_source == DEFAULT || positionConfig()->altitude_source == BARO_ONLY)) {
             zeroedAltitudeCm = baroAltCm; // use Baro if no GPS data, or we want Baro only
+        } 
+#ifdef USE_RANGEFINDER
         }
+#endif
     }
 
     zeroedAltitudeCm = pt2FilterApply(&altitudeLpf, zeroedAltitudeCm);

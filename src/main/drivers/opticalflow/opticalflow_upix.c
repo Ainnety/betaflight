@@ -187,7 +187,7 @@ void upixOpticalflowReceiveNewData(const uint8_t * bufferPtr) {
     }
     opticalflowSensorData.quality = pkt->quality * 100 / 255;
  
-    // distance is reported in mm; gate against fixed 80 mm (same as MT)
+    // distance is reported in mm; gate against fixed 20 mm (same as MT)
     if (latestRangefinderData->distanceMm < UPIX_OPTICALFLOW_MIN_RANGE) {
          opticalflowSensorData.quality = OPTICALFLOW_OUT_OF_RANGE;
      } else if (cmp32(micros(), latestRangefinderData->timestampUs) > (5000 * deviceConf->delayMs)) {   // 5 updates missing

@@ -284,6 +284,11 @@
 #if !defined(USE_GPS)
 #define USE_GPS
 #endif
+
+#if !defined(USE_MAG)
+#define USE_MAG
+#endif
+
 #define USE_ALTITUDE_HOLD
 #define USE_POSITION_HOLD
 

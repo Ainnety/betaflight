@@ -193,39 +193,16 @@ void updateOpticalflowPosition(void) {
     // Get altitude (cm), required for converting angular velocity to linear velocity
     // Priority: Rangefinder (direct ground distance) > Baro/GPS (relative to takeoff)
     float altitudeCm = 0.0f;
-    bool useRangefinder = false;
-    
-#ifdef USE_RANGEFINDER
-    // Prefer rangefinder for optical flow (direct measurement of ground distance)
-    if (sensors(SENSOR_RANGEFINDER) && rangefinderIsHealthy()) {
-        int32_t rangefinderAlt = rangefinderGetLatestAltitude();
-        // Use rangefinder if it's in valid range (10cm to 500cm for optical flow)
-        // rangefinderAlt is in cm, RANGEFINDER_OUT_OF_RANGE is negative
-        if (rangefinderAlt >= 2 && rangefinderAlt <= 400) {  // Valid range: 10-500cm
-            altitudeCm = (float)rangefinderAlt;
-            useRangefinder = true;
-        } else if (rangefinderAlt > 400) {
-            // Rangefinder exceeds maximum range, fallback to baro/GPS
-            useRangefinder = false;
-        }
-        // If rangefinderAlt < 10 or <= 0 (invalid), also fallback
-    }
-#endif
-    
-    // Fallback to baro/GPS altitude if rangefinder is not available or exceeds max range
-    if (!useRangefinder) {
-        altitudeCm = getAltitudeCm();
-    }
-
-    DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 0, altitudeCm);
+    altitudeCm = getAltitudeCm();
+    // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 0, altitudeCm);
     
     // If altitude is invalid or too small, don't update position
     // if (altitudeCm < 10.0f) {  // Minimum altitude 10cm
     //     return;
     // }
     
-    const int32_t deltaTimeUs = ofData->deltaTimeUs;
-    DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 1, deltaTimeUs);
+    const uint32_t deltaTimeUs = ofData->deltaTimeUs;
+    // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 1, deltaTimeUs);
 
     // Skip if no time has passed or time delta is too large (>100ms)
     if (deltaTimeUs <= 0 || deltaTimeUs > 100000) {
@@ -234,37 +211,36 @@ void updateOpticalflowPosition(void) {
 
     float deltaTimeS = (float)deltaTimeUs / 1000000.0f;
     
+    // Apply tilt compensation: when the craft is tilted, optical flow measures
+    // velocity perpendicular to the sensor plane, which needs to be compensated
+    // by dividing by cos(tilt angle) to get the true ground velocity.
+    // const float pitchRad = DECIDEGREES_TO_RADIANS(attitude.values.pitch * 0.1f);
+    // const float rollRad = DECIDEGREES_TO_RADIANS(attitude.values.roll * 0.1f);
+    // float flowX = ofData->processedFlowRates.x / cos_approx(pitchRad);
+    // float flowY = ofData->processedFlowRates.y / cos_approx(rollRad);
+    
     // Convert angular velocity (rad/s) to ground velocity (cm/s) in body frame
     // velocity = angular_velocity * altitude
     vector2_t bodyFrameVelocity;
     bodyFrameVelocity.x = ofData->processedFlowRates.x * altitudeCm;  // rad/s * cm = cm/s
     bodyFrameVelocity.y = ofData->processedFlowRates.y * altitudeCm;
 
-    DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 2, bodyFrameVelocity.x);
-    DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 3, bodyFrameVelocity.y);
+    // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 2, bodyFrameVelocity.x);
+    // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 3, bodyFrameVelocity.y);
     
-    // ** Convert velocity from body frame to earth frame (ENU) using yaw angle **
+    // Convert velocity from body frame to earth frame (ENU) using yaw angle 
     // attitude.values.yaw is clockwise from north (in 0.1 degrees)
     // Need to convert to counterclockwise from east for ENU coordinate system
     const float yawRad = DECIDEGREES_TO_RADIANS(attitude.values.yaw - 900);
-    
     // Rotate from body frame to earth frame (opposite direction from GPS position control)
-    vector2_t earthFrameVelocity;
-    vector2Rotate(&earthFrameVelocity, &bodyFrameVelocity, -yawRad);  // Negative for reverse rotation
-    
-    // Update velocity with low-pass filtering
-    const float velLpfGain = pt1FilterGain(5.0f, deltaTimeS);  // 5Hz cutoff frequency
-    pt1FilterUpdateCutoff(&ap.efAxis[LON].velocityLpf, velLpfGain);
-    pt1FilterUpdateCutoff(&ap.efAxis[LAT].velocityLpf, velLpfGain);
-    ofPos.velocityCmS.x = pt1FilterApply(&ap.efAxis[LON].velocityLpf, earthFrameVelocity.x);
-    ofPos.velocityCmS.y = pt1FilterApply(&ap.efAxis[LAT].velocityLpf, earthFrameVelocity.y);
+    vector2Rotate(&ofPos.velocityCmS, &bodyFrameVelocity, -yawRad);  // Negative for reverse rotation
     
     // Integrate velocity to get position
     ofPos.positionCm.x += ofPos.velocityCmS.x * deltaTimeS;
     ofPos.positionCm.y += ofPos.velocityCmS.y * deltaTimeS;
 
-    DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 4, ofPos.positionCm.x);
-    DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 5, ofPos.positionCm.y);
+    // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 4, ofPos.positionCm.x);
+    // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 5, ofPos.positionCm.y);
 }
 
 void resetPositionControl(const gpsLocation_t *initialTargetLocation, unsigned taskRateHz)
@@ -283,9 +259,12 @@ void resetPositionControl(const gpsLocation_t *initialTargetLocation, unsigned t
     resetUpsampleFilters(); // clear accumlator from previous iterations
     
     // Reset optical flow position estimation if using optical flow
+    // Note: Optical flow position should be initialized when stable data is available
+    // to avoid holding at an incorrect initial position
     if (sensors(SENSOR_OPTICALFLOW)) {
         initOpticalflowPosition();
         // Set target position to current position (hold at entry point)
+        // This assumes position has been properly initialized with stable optical flow data
         ofPos.targetPositionCm = ofPos.positionCm;
     }
 }
@@ -412,9 +391,9 @@ bool positionControl(void)
             return false;  // Optical flow data invalid
         }
         
-        // Optical flow typically updates at 50-100Hz, use fixed interval
-        const float ofDataInterval = 0.02f;  // Assume 50Hz
-        const float ofDataFreq = 50.0f;
+        // Use actual optical flow data timing
+        const float ofDataInterval = (float)ofData->deltaTimeUs / 1000000.0f;  // Convert to seconds
+        const float ofDataFreq = 1.0f / ofDataInterval;  // Calculate actual frequency
         
         // Calculate position error (target position - current position)
         // Target is typically {0, 0} (hold position when entering hold mode)
@@ -449,10 +428,11 @@ bool positionControl(void)
             pidSum.v[efAxisIdx] += pidI;
             
             // ** D ** - Use optical flow velocity directly
-            const float velocity = -ofPos.velocityCmS.v[efAxisIdx];  // Negative because velocity direction
+            const float velocity = -ofPos.velocityCmS.v[efAxisIdx]; 
             pt1FilterUpdateCutoff(&efAxis->velocityLpf, vaGain);
             const float velocityFiltered = pt1FilterApply(&efAxis->velocityLpf, velocity);
             float pidD = velocityFiltered * positionPidCoeffs.Kd;
+            // float pidD = velocity * positionPidCoeffs.Kd;
             
             // ** A ** - Acceleration from velocity derivative
             float acceleration = (velocityFiltered - efAxis->previousVelocity) * ofDataFreq;
@@ -465,6 +445,7 @@ bool positionControl(void)
                 // Sticks active phase, prepare to enter stopping
                 efAxis->isStopping = true;
                 efAxis->integral *= iTermLeakGain;
+                efAxis->previousVelocity = 0.0f; // avoid acceleration spikes
                 // Reset target position to current position
                 ofPos.targetPositionCm = ofPos.positionCm;
             } else if (efAxis->isStopping) {
@@ -474,6 +455,7 @@ bool positionControl(void)
                 if (velocity * velocityFiltered < 0.0f) {
                     // Reset target position for this axis
                     ofPos.targetPositionCm.v[efAxisIdx] = ofPos.positionCm.v[efAxisIdx];
+                    efAxis->previousVelocity = 0.0f; // avoid acceleration spikes when resuming
                     efAxis->isStopping = false;
                     if (ap.efAxis[LAT].isStopping == ap.efAxis[LON].isStopping) {
                         ap.sanityCheckDistance = sanityCheckDistance(1000);
@@ -482,13 +464,13 @@ bool positionControl(void)
             }
             pidDA.v[efAxisIdx] = pidD + pidA;
             
-            // if (debugAxis == efAxisIdx) {
-                // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 0, lrintf(distanceNormCm));
-                // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 4, lrintf(pidP * 10));
-                // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 5, lrintf(pidI * 10));
-                // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 6, lrintf(pidD * 10));
-                // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 7, lrintf(pidA * 10));
-            // }
+            if (debugAxis == efAxisIdx) {
+                DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 0, lrintf(distanceNormCm));
+                DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 4, lrintf(pidP * 10));
+                DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 5, lrintf(pidI * 10));
+                DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 6, lrintf(pidD * 10));
+                DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 7, lrintf(pidA * 10));
+            }
         }
         
         // Limit D+A
@@ -529,14 +511,14 @@ bool positionControl(void)
             autopilotAngle[i] = pt3FilterApply(&ap.upsampleLpfBF[i], ap.pidSumBF.v[i]);
         }
         
-        // if (debugAxis < 2) {
-            // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 1, lrintf(positionError.v[debugAxis]));
-            // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 2, lrintf(debugPidSumEF.v[debugAxis] * 10));
-            // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 3, lrintf(autopilotAngle[debugAxis] * 10));
-        // }
+        if (debugAxis < 2) {
+            DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 1, lrintf(positionError.v[debugAxis]));
+            DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 2, lrintf(debugPidSumEF.v[debugAxis] * 10));
+            DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 3, lrintf(autopilotAngle[debugAxis] * 10));
+        }
         
-        DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 6, ofPos.targetPositionCm.x);
-        DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 7, ofPos.targetPositionCm.y);
+        // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 6, ofPos.targetPositionCm.x);
+        // DEBUG_SET(DEBUG_AUTOPILOT_POSITION, 7, ofPos.targetPositionCm.y);
 
         return true;
     }
